@@ -1,5 +1,5 @@
 [package]
-name = "git-new-branch"
+name = "redmine-new-branch"
 version = "0.1.0"
 authors = ["François Rieucau <frieucau@wallix.com>"]
 edition = "2018"
