@@ -59,7 +59,11 @@ impl Issue {
         format!(
             "rd-{number}-{trigram}-{version}-{subject}",
             number = self.id,
-            subject = self.subject.replace(" ", "-").to_lowercase(),
+            subject = self
+                .subject
+                .replace(" ", "-")
+                .replace("\"", "")
+                .to_lowercase(),
             version = &self.target_version(),
             trigram = format!("{}{}", &v[0][..1], &v[1][..2]).to_lowercase()
         )
@@ -252,7 +256,7 @@ mod tests {
         let t = Ticket {
             issue: Issue {
                 id: 42,
-                subject: String::from("Do stuff"),
+                subject: String::from("Do stuff \"asap\""),
                 assigned_to: NamedProperty {
                     id: 220,
                     name: String::from("Arnold Bcon Tran"),
@@ -268,6 +272,6 @@ mod tests {
                 }],
             },
         };
-        assert_eq!(t.issue.get_branch_name(), "rd-42-abc-8.1-do-stuff");
+        assert_eq!(t.issue.get_branch_name(), "rd-42-abc-8.1-do-stuff-asap");
     }
 }
