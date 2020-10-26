@@ -87,7 +87,9 @@ fn get_ticket_body(ticket: i64, key: String) -> Result<String, reqwest::Error> {
 
     println!("Requesting {:?}...", ticket_url);
 
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()?;
 
     client
         .get(&ticket_url)
