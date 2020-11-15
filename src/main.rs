@@ -63,6 +63,8 @@ impl Issue {
                 .subject
                 .replace(" ", "-")
                 .replace("\"", "")
+                .replace("[", "")
+                .replace("]", "")
                 .to_lowercase(),
             version = &self.target_version(),
             trigram = format!("{}{}", &v[0][..1], &v[1][..2]).to_lowercase()
@@ -258,7 +260,7 @@ mod tests {
         let t = Ticket {
             issue: Issue {
                 id: 42,
-                subject: String::from("Do stuff \"asap\""),
+                subject: String::from("[Do] stuff \"asap\""),
                 assigned_to: NamedProperty {
                     id: 220,
                     name: String::from("Arnold Bcon Tran"),
