@@ -25,6 +25,10 @@ struct Opt {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+struct IdProperty {
+    id: i32,
+}
+#[derive(Serialize, Deserialize, Debug)]
 struct NamedProperty {
     id: i32,
     name: String,
@@ -43,6 +47,7 @@ struct Issue {
     fixed_version: NamedProperty,
     assigned_to: NamedProperty,
     custom_fields: Vec<NamedPropertyWithValue>,
+    parent: Option<IdProperty>
 }
 
 impl Issue {
@@ -125,10 +130,28 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
 
     let remote_name = remotes.get(0).unwrap_or("origin");
 
-    let mut target_branch = format!("{}/{}", remote_name, "master");
+    let mut source_branch = format!("{}/{}", remote_name, "master");
 
     let head = repo.head()?;
     let head_ref = head.name().unwrap();
+
+
+    let remote_branchs: Vec<String> = repo.branches(Some(BranchType::Remote))?.into_iter().map( |b| {
+        let name = match b {
+            Ok((b,_)) => {
+                let bb = b.name();
+                let name = match bb {
+                    Ok(Some(name)) => name,
+                    _ => ""
+                };
+                return name.to_string()
+            },
+            _ =>  ""
+        };
+        return name.to_string()
+    }).filter(|name| name != "").collect();
+
+    // println!("List of all branch {:?}",remote_branchs);
 
     if head_ref.ends_with(&ticket.issue.get_branch_name()) {
         println!(
@@ -140,33 +163,31 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
 
     println!("Target version : {}", ticket.issue.target_version());
 
-    let target_branch_name = format!("origin/wab-{}", ticket.issue.target_version());
+    let maintenance_branch_name = format!("{}/wab-{}", remote_name, ticket.issue.target_version());
 
-    let mut is_specific_target_branch = false;
+    // Search if there is a maintenance branch for this version
+    let is_maintenance_branch_existing : bool = remote_branchs.into_iter().find( | b | { maintenance_branch_name.eq(b) } ) != None ;
+
+    if is_maintenance_branch_existing {
+        source_branch = maintenance_branch_name;
+    }
+
+    match &ticket.issue.parent {
+        Some(p) => { println!("This ticket has a parent : {:?}, you may want to use it as source ?",p) }
+        _ => { println!("This ticket has no parent") }
+    }
 
     for b in repo.branches(Some(BranchType::Remote))? {
         let (b, _) = b?;
-        let name = b.name()?;
-        if name.unwrap_or("no name") == target_branch_name {
-            is_specific_target_branch = true;
-        }
-    }
+        let name = b.name()?.unwrap();
 
-    if is_specific_target_branch {
-        target_branch = target_branch_name;
-    }
-
-    for b in repo.branches(Some(BranchType::Remote))? {
-        let (b, _) = b?;
-        let name = b.name()?;
-
-        if name.unwrap_or("no name") == target_branch {
-            println!("I found {} !", name.unwrap_or("no name"));
+        if name == source_branch {
+            println!("I found {} !", name);
             let reference = b.get();
             let name_new_branch = ticket.issue.get_branch_name();
             println!(
                 "Let's create branch {} based on {}",
-                name_new_branch, target_branch
+                name_new_branch, source_branch
             );
             let commit = reference.peel_to_commit()?;
             // create the new branch based on this commit
@@ -199,6 +220,8 @@ fn main() {
         Ok(t) => t,
         Err(e) => panic!("Unable to decode json \"{}\" => {}", body, e),
     };
+
+    // println!("Ticket {:?}",ticket)
 
     match create_new_branch(ticket) {
         Ok(()) => {}
@@ -274,6 +297,7 @@ mod tests {
                     name: String::from("Developer"),
                     value: String::from("220"),
                 }],
+                parent: None
             },
         };
         assert_eq!(t.issue.get_branch_name(), "rd-42-abc-8.1-do-stuff-asap");
