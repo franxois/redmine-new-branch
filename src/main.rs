@@ -1,3 +1,4 @@
+use dialoguer::{theme::ColorfulTheme, Select};
 use git2::{BranchType, Repository, RepositoryState};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -47,7 +48,7 @@ struct Issue {
     fixed_version: NamedProperty,
     assigned_to: NamedProperty,
     custom_fields: Vec<NamedPropertyWithValue>,
-    parent: Option<IdProperty>
+    parent: Option<IdProperty>,
 }
 
 impl Issue {
@@ -135,21 +136,25 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
     let head = repo.head()?;
     let head_ref = head.name().unwrap();
 
-
-    let remote_branchs: Vec<String> = repo.branches(Some(BranchType::Remote))?.into_iter().map( |b| {
-        let name = match b {
-            Ok((b,_)) => {
-                let bb = b.name();
-                let name = match bb {
-                    Ok(Some(name)) => name,
-                    _ => ""
-                };
-                return name.to_string()
-            },
-            _ =>  ""
-        };
-        return name.to_string()
-    }).filter(|name| name != "").collect();
+    let remote_branchs: Vec<String> = repo
+        .branches(Some(BranchType::Remote))?
+        .into_iter()
+        .map(|b| {
+            let name = match b {
+                Ok((b, _)) => {
+                    let bb = b.name();
+                    let name = match bb {
+                        Ok(Some(name)) => name,
+                        _ => "",
+                    };
+                    return name.to_string();
+                }
+                _ => "",
+            };
+            return name.to_string();
+        })
+        .filter(|name| name != "")
+        .collect();
 
     // println!("List of all branch {:?}",remote_branchs);
 
@@ -166,15 +171,38 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
     let maintenance_branch_name = format!("{}/wab-{}", remote_name, ticket.issue.target_version());
 
     // Search if there is a maintenance branch for this version
-    let is_maintenance_branch_existing : bool = remote_branchs.into_iter().find( | b | { maintenance_branch_name.eq(b) } ) != None ;
+    let is_maintenance_branch_existing: bool = match &remote_branchs
+        .clone()
+        .into_iter()
+        .find(|b| maintenance_branch_name.eq(b))
+    {
+        &None => false,
+        _ => true,
+    };
 
     if is_maintenance_branch_existing {
         source_branch = maintenance_branch_name;
-    }
+    } else {
+        match &ticket.issue.parent {
+            Some(p) => {
+                let sources: Vec<String> = remote_branchs
+                    .into_iter()
+                    .filter(|name| name.contains(&p.id.to_string()))
+                    .collect();
 
-    match &ticket.issue.parent {
-        Some(p) => { println!("This ticket has a parent : {:?}, you may want to use it as source ?",p) }
-        _ => { println!("This ticket has no parent") }
+                let selections: &[&str] = &[&source_branch, &sources[0]];
+
+                let selection = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("This ticket has a parent, what branch use to be based on ?")
+                    .default(0)
+                    .items(&selections[..])
+                    .interact()
+                    .unwrap();
+
+                source_branch = selections[selection].to_string();
+            }
+            _ => println!("This ticket has no parent"),
+        }
     }
 
     for b in repo.branches(Some(BranchType::Remote))? {
@@ -297,7 +325,7 @@ mod tests {
                     name: String::from("Developer"),
                     value: String::from("220"),
                 }],
-                parent: None
+                parent: None,
             },
         };
         assert_eq!(t.issue.get_branch_name(), "rd-42-abc-8.1-do-stuff-asap");
