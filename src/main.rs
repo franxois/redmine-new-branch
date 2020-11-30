@@ -7,8 +7,8 @@ use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
-    name = "git-new-branch",
-    about = "Create a new branch following your team naming."
+    name = "redmine-new-branch",
+    about = "Create a new git branch following your team naming."
 )]
 struct Opt {
     /// Activate debug mode
@@ -35,10 +35,10 @@ struct NamedProperty {
     name: String,
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct NamedPropertyWithValue {
+struct NamedPropertyWithOptionValue {
     id: i32,
     name: String,
-    value: String,
+    value: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -47,7 +47,7 @@ struct Issue {
     subject: String,
     fixed_version: NamedProperty,
     assigned_to: NamedProperty,
-    custom_fields: Vec<NamedPropertyWithValue>,
+    custom_fields: Vec<NamedPropertyWithOptionValue>,
     parent: Option<IdProperty>,
 }
 
@@ -166,19 +166,31 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
         return Ok(());
     }
 
+    // Check if target branch already exists !
+
+    let branch_containing_this_ticket = remote_branchs
+        .clone()
+        .into_iter()
+        .find(|name| name.contains(&ticket.issue.id.to_string()));
+
+    if branch_containing_this_ticket.is_some() {
+        println!(
+            "Desired branch already exists {}",
+            ticket.issue.get_branch_name()
+        );
+        return Ok(());
+    }
+
     println!("Target version : {}", ticket.issue.target_version());
 
     let maintenance_branch_name = format!("{}/wab-{}", remote_name, ticket.issue.target_version());
 
     // Search if there is a maintenance branch for this version
-    let is_maintenance_branch_existing: bool = match &remote_branchs
+    let is_maintenance_branch_existing: bool = !remote_branchs
         .clone()
         .into_iter()
         .find(|b| maintenance_branch_name.eq(b))
-    {
-        &None => false,
-        _ => true,
-    };
+        .is_none();
 
     if is_maintenance_branch_existing {
         source_branch = maintenance_branch_name;
@@ -320,11 +332,18 @@ mod tests {
                     id: 318,
                     name: String::from("8.1.0"),
                 },
-                custom_fields: vec![NamedPropertyWithValue {
-                    id: 50,
-                    name: String::from("Developer"),
-                    value: String::from("220"),
-                }],
+                custom_fields: vec![
+                    NamedPropertyWithOptionValue {
+                        id: 50,
+                        name: String::from("Developer"),
+                        value: Some(String::from("220")),
+                    },
+                    NamedPropertyWithOptionValue {
+                        id: 50,
+                        name: String::from("SF Case"),
+                        value: None,
+                    },
+                ],
                 parent: None,
             },
         };
