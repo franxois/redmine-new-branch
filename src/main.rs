@@ -71,6 +71,7 @@ impl Issue {
                 .replace("\"", "")
                 .replace("[", "")
                 .replace("]", "")
+                .replace(":", "=")
                 .to_lowercase(),
             version = &self.target_version(),
             trigram = format!("{}{}", &v[0][..1], &v[1][..2]).to_lowercase()
@@ -175,8 +176,9 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
 
     if branch_containing_this_ticket.is_some() {
         println!(
-            "Desired branch already exists {}",
-            ticket.issue.get_branch_name()
+            "A branch already exists for this ticket {} => {}",
+            ticket.issue.id,
+            branch_containing_this_ticket.unwrap()
         );
         return Ok(());
     }
@@ -202,16 +204,23 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
                     .filter(|name| name.contains(&p.id.to_string()))
                     .collect();
 
-                let selections: &[&str] = &[&source_branch, &sources[0]];
+                if sources.len() > 0 {
+                    let selections: &[&str] = &[&source_branch, &sources[0]];
 
-                let selection = Select::with_theme(&ColorfulTheme::default())
-                    .with_prompt("This ticket has a parent, what branch use to be based on ?")
-                    .default(0)
-                    .items(&selections[..])
-                    .interact()
-                    .unwrap();
+                    let selection = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("This ticket has a parent, what branch use to be based on ?")
+                        .default(0)
+                        .items(&selections[..])
+                        .interact()
+                        .unwrap();
 
-                source_branch = selections[selection].to_string();
+                    source_branch = selections[selection].to_string();
+                } else {
+                    println!(
+                        "This ticket has {} as parent but the branch don't exist",
+                        &p.id
+                    )
+                }
             }
             _ => println!("This ticket has no parent"),
         }
