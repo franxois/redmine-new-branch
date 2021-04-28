@@ -67,6 +67,7 @@ impl Issue {
             number = self.id,
             subject = self
                 .subject
+                .trim()
                 .replace(" ", "-")
                 .replace("\"", "")
                 .replace("[", "")
@@ -332,7 +333,7 @@ mod tests {
         let t = Ticket {
             issue: Issue {
                 id: 42,
-                subject: String::from("[Do] stuff \"asap\""),
+                subject: String::from("[Do] stuff \"asap\" "),
                 assigned_to: NamedProperty {
                     id: 220,
                     name: String::from("Arnold Bcon Tran"),
