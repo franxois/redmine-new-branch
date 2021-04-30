@@ -9,4 +9,8 @@ This command :
 
 ## how to
 
-build `cargo build --release`
+    # dev
+    cargo watch -x test -x 'build --release'
+
+    # build
+    cargo build --release

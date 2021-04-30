@@ -1,5 +1,6 @@
 use dialoguer::{theme::ColorfulTheme, Select};
 use git2::{BranchType, Repository, RepositoryState};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::str;
@@ -11,10 +12,14 @@ use structopt::StructOpt;
     about = "Create a new git branch following your team naming."
 )]
 struct Opt {
-    /// Activate debug mode
+    /// Activate debug mode ( not implemented )
     // short and long flags (-d, --debug) will be deduced from the field's name
-    #[structopt(short, long)]
+    #[structopt(long)]
     debug: bool,
+
+    // Don't create git branch
+    #[structopt(short, long)]
+    dry_run: bool,
 
     /// Set redmine ticket
     #[structopt(short, long)]
@@ -55,6 +60,24 @@ impl Issue {
     fn target_version(&self) -> &str {
         &self.fixed_version.name[..3]
     }
+
+    fn cleanup_subject(subject: &String) -> String {
+        let mut subject = subject
+            .trim()
+            .replace(" ", "-")
+            .replace(":", "=")
+            .to_lowercase();
+
+        // Replace multiple -- by only one -
+        let re_multiple_dash = Regex::new(r"-+").unwrap();
+        let re_forbidden_char = Regex::new(r#"[\[\]"]*"#).unwrap();
+
+        subject = re_multiple_dash.replace_all(&subject, "-").to_string();
+        subject = re_forbidden_char.replace_all(&subject, "").to_string();
+
+        subject
+    }
+
     fn get_branch_name(&self) -> String {
         let v: Vec<&str> = self.assigned_to.name.split(' ').collect();
 
@@ -62,18 +85,12 @@ impl Issue {
             panic!("Unable to read trigram")
         }
 
+        let subject = Issue::cleanup_subject(&self.subject);
+
         format!(
             "rd-{number}-{trigram}-{version}-{subject}",
             number = self.id,
-            subject = self
-                .subject
-                .trim()
-                .replace(" ", "-")
-                .replace("\"", "")
-                .replace("[", "")
-                .replace("]", "")
-                .replace(":", "=")
-                .to_lowercase(),
+            subject = subject,
             version = &self.target_version(),
             trigram = format!("{}{}", &v[0][..1], &v[1][..2]).to_lowercase()
         )
@@ -138,31 +155,28 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
     let head = repo.head()?;
     let head_ref = head.name().unwrap();
 
-    let remote_branchs: Vec<String> = repo
+    let remote_branches: Vec<String> = repo
         .branches(Some(BranchType::Remote))?
         .into_iter()
-        .map(|b| {
-            let name = match b {
-                Ok((b, _)) => {
-                    let bb = b.name();
-                    let name = match bb {
-                        Ok(Some(name)) => name,
-                        _ => "",
-                    };
-                    return name.to_string();
+        .filter_map(|b| {
+            if let Ok((branch, _)) = b {
+                if let Ok(Some(branch_name)) = branch.name() {
+                    return Some(branch_name.to_string());
                 }
-                _ => "",
-            };
-            return name.to_string();
+            }
+            return None;
         })
-        .filter(|name| name != "")
         .collect();
 
-    // println!("List of all branch {:?}",remote_branchs);
+    // println!(
+    //     "List of all {} remote branchs {:?}",
+    //     remote_branchs.len(),
+    //     remote_branchs
+    // );
 
     if head_ref.ends_with(&ticket.issue.get_branch_name()) {
         println!(
-            "We are already in the corresponding branch {}",
+            "We are already in the desired branch {}",
             ticket.issue.get_branch_name()
         );
         return Ok(());
@@ -170,15 +184,17 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
 
     // Check if target branch already exists !
 
-    let branch_containing_this_ticket = remote_branchs
+    let branch_containing_this_ticket = remote_branches
         .clone()
         .into_iter()
         .find(|name| name.contains(&ticket.issue.id.to_string()));
 
     if let Some(existing_branch) = branch_containing_this_ticket {
         println!(
-            "A branch already exists for this ticket #{} => {}",
-            ticket.issue.id, existing_branch
+            "I could create branch {} but the branch {} already exists for the ticket #{}",
+            ticket.issue.get_branch_name(),
+            existing_branch,
+            ticket.issue.id,
         );
         return Ok(());
     }
@@ -188,7 +204,7 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
     let maintenance_branch_name = format!("{}/wab-{}", remote_name, ticket.issue.target_version());
 
     // Search if there is a maintenance branch for this version
-    let is_maintenance_branch_existing: bool = !remote_branchs
+    let is_maintenance_branch_existing: bool = !remote_branches
         .clone()
         .into_iter()
         .find(|b| maintenance_branch_name.eq(b))
@@ -198,7 +214,7 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
         source_branch = maintenance_branch_name;
     } else {
         if let Some(p) = &ticket.issue.parent {
-            let sources: Vec<String> = remote_branchs
+            let sources: Vec<String> = remote_branches
                 .into_iter()
                 .filter(|name| name.contains(&p.id.to_string()))
                 .collect();
@@ -259,7 +275,7 @@ fn main() {
 
     let body = match body {
         Ok(body) => body,
-        Err(e) => panic!("Unable to fetch Redmine API {}", e),
+        Err(e) => panic!("Unable to fetch Redmine API : {}", e),
     };
 
     let ticket = read_issue(&body);
@@ -269,11 +285,11 @@ fn main() {
         Err(e) => panic!("Unable to decode json \"{}\" => {}", body, e),
     };
 
-    // println!("Ticket {:?}",ticket)
-
-    match create_new_branch(ticket) {
-        Ok(()) => {}
-        Err(e) => println!("Error : {}", e),
+    if !opt.dry_run {
+        match create_new_branch(ticket) {
+            Ok(()) => {}
+            Err(e) => println!("Error : {}", e),
+        }
     }
 }
 
@@ -356,5 +372,15 @@ mod tests {
             },
         };
         assert_eq!(t.issue.get_branch_name(), "rd-42-abc-8.1-do-stuff-asap");
+    }
+
+    #[test]
+    fn test_subject_cleanup() {
+        assert_eq!(Issue::cleanup_subject(&String::from("-----")), "-");
+        assert_eq!(Issue::cleanup_subject(&String::from("  - -  - -  ")), "-");
+        assert_eq!(
+            Issue::cleanup_subject(&String::from(" [Do] the - \"laundry\" ")),
+            "do-the-laundry"
+        );
     }
 }
