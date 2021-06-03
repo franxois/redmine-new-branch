@@ -70,7 +70,7 @@ impl Issue {
 
         // Replace multiple -- by only one -
         let re_multiple_dash = Regex::new(r"-+").unwrap();
-        let re_forbidden_char = Regex::new(r#"[\[\]"']*"#).unwrap();
+        let re_forbidden_char = Regex::new(r#"[\[\]"'\)\()]*"#).unwrap();
 
         subject = re_multiple_dash.replace_all(&subject, "-").to_string();
         subject = re_forbidden_char.replace_all(&subject, "").to_string();
@@ -378,7 +378,7 @@ mod tests {
     fn test_subject_cleanup() {
         assert_eq!(Issue::cleanup_subject(&String::from("-----")), "-");
         assert_eq!(Issue::cleanup_subject(&String::from("  - -  - -  ")), "-");
-        assert_eq!(Issue::cleanup_subject(&String::from("it's a clean")), "its-a-clean");
+        assert_eq!(Issue::cleanup_subject(&String::from("it's a clean()")), "its-a-clean");
         assert_eq!(
             Issue::cleanup_subject(&String::from(" [Do] the - \"laundry\" ")),
             "do-the-laundry"
