@@ -16,3 +16,6 @@ regex = "1.4"
 
 # For the interactive menu https://github.com/mitsuhiko/dialoguer
 dialoguer = "0.8"
+
+# I want confy::get_configuration_file_path() available after current 0.4
+confy = { git = "https://github.com/rust-cli/confy", rev = "664992a" }

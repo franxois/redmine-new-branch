@@ -13,9 +13,9 @@ use structopt::StructOpt;
 )]
 struct Opt {
     /// Activate debug mode ( not implemented )
-    // short and long flags (-d, --debug) will be deduced from the field's name
-    #[structopt(long)]
-    debug: bool,
+    // short and long flags (-v, --verbose) will be deduced from the field's name
+    #[structopt(short, long)]
+    verbose: bool,
 
     // Don't create git branch
     #[structopt(short, long)]
@@ -24,10 +24,12 @@ struct Opt {
     /// Set redmine ticket
     #[structopt(short, long)]
     ticket: i64,
+}
 
-    /// Redmine access key
-    #[structopt(short, long)]
-    key_redmine_api: String,
+#[derive(Default, Debug, Serialize, Deserialize)]
+struct MyConfig {
+    version: u8,
+    api_key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -268,10 +270,27 @@ fn create_new_branch(ticket: Ticket) -> Result<(), git2::Error> {
     Ok(())
 }
 
-fn main() {
+fn main()-> Result<(), confy::ConfyError> {
+
+    let app_name = env!("CARGO_PKG_NAME");
     let opt = Opt::from_args();
 
-    let body = get_ticket_body(opt.ticket, opt.key_redmine_api);
+    dbg!(&opt);
+
+    let cfg: MyConfig = confy::load(app_name, None)?;
+
+    let config_path = confy::get_configuration_file_path(app_name, None)?;
+
+    if opt.verbose {
+        println!("Reading config in {:?}",config_path);
+    }
+
+    if cfg.api_key == "" {
+        println!("No api key found, storing default config file in {:?}...",config_path);
+        confy::store(app_name, None, &cfg)?;
+    }
+
+    let body = get_ticket_body(opt.ticket, cfg.api_key);
 
     let body = match body {
         Ok(body) => body,
@@ -291,6 +310,8 @@ fn main() {
             Err(e) => println!("Error : {}", e),
         }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
