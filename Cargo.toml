@@ -19,3 +19,5 @@ dialoguer = "0.8"
 
 # I want confy::get_configuration_file_path() available after current 0.4
 confy = { git = "https://github.com/rust-cli/confy", rev = "664992a" }
+
+diacritics = "0.1.1"

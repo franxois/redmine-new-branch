@@ -76,6 +76,8 @@ impl Issue {
 
         subject = re_multiple_dash.replace_all(&subject, "-").to_string();
         subject = re_forbidden_char.replace_all(&subject, "").to_string();
+        // Replace "à" by "a", "é" by "e" ...
+        subject = diacritics::remove_diacritics(&subject);
 
         subject
     }
@@ -274,8 +276,6 @@ fn main()-> Result<(), confy::ConfyError> {
 
     let app_name = env!("CARGO_PKG_NAME");
     let opt = Opt::from_args();
-
-    dbg!(&opt);
 
     let cfg: MyConfig = confy::load(app_name, None)?;
 
